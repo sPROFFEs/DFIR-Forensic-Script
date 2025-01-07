@@ -1,4 +1,4 @@
-# DFIR Network Data Collection Script
+# DFIR Data Collection Script
 
 A script designed for **Digital Forensics and Incident Response (DFIR)** to collect critical information from live Windows systems. This tool automates the execution of built-in and third-party utilities to gather data useful for forensic analysis and security incident investigation.
 
