@@ -1,0 +1,24 @@
+# Ignorar archivos de sistema
+Thumbs.db
+Desktop.ini
+
+# Ignorar archivos de logs
+*.log
+
+# Ignorar archivos temporales de Windows
+*.bak
+*.swp
+*.tmp
+*.~*
+
+# Ignorar archivos generados por el sistema
+.DS_Store
+
+# Ignorar archivos de IDEs y editores
+.vscode/
+.idea/
+
+# Ignorar carpetas de compilación o dependencias
+node_modules/
+dist/
+build/
