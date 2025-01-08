@@ -9,11 +9,11 @@ function Format-CommandOutput {
     $result = [ordered]@{
         CommandName = $CommandName
         Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Data = [ordered]@{}
+        Data = [System.Collections.ArrayList]@()
     }
     
-    $currentSection = "General"
-    $sectionData = [System.Collections.ArrayList]@()
+    $currentSection = ""
+    $headers = @()
     
     for ($i = 0; $i -lt $outputLines.Count; $i++) {
         $line = $outputLines[$i]
@@ -26,40 +26,52 @@ function Format-CommandOutput {
             $key = $matches[1].Trim()
             $value = $matches[2].Trim()
             
-            # If value is empty or next line seems to be related content
-            if ($value -eq "" -and ($i + 1 -lt $outputLines.Count)) {
-                if ($currentSection -ne "General" -and $sectionData.Count -gt 0) {
-                    $result.Data[$currentSection] = @($sectionData.ToArray())
-                    $sectionData.Clear()
-                }
-                $currentSection = $key
-            } else {
-                $entryObj = [ordered]@{
-                    Key = $key
-                    Value = if ($value -eq "") { "N/A" } else { $value }
-                }
-                [void]$sectionData.Add($entryObj)
-            }
+            [void]$result.Data.Add([PSCustomObject]@{
+                Section = $currentSection
+                Property = $key
+                Value = if ($value -eq "") { "N/A" } else { $value }
+            })
         }
         # Handle table-like output
         elseif ($line -match '^\s*\S+\s+\S+') {
             $parts = @($line -split '\s+' | Where-Object { $_ -ne "" })
-            if ($parts.Count -ge 2) {
-                $entryObj = [ordered]@{
-                    Row = $parts
+            
+            # If this looks like a header row
+            if ($line -match '(IP Address|Protocol|Local|Remote|Status|PID|Process)' -or 
+                $parts[0] -match '^[A-Za-z]+$') {
+                $headers = $parts
+                $currentSection = "Table"
+                continue
+            }
+            
+            # If we have headers, create an object with named properties
+            if ($headers.Count -gt 0 -and $parts.Count -le $headers.Count) {
+                $obj = [ordered]@{
+                    Section = $currentSection
                 }
-                [void]$sectionData.Add($entryObj)
+                
+                for ($j = 0; $j -lt $parts.Count; $j++) {
+                    $headerName = if ($j -lt $headers.Count) { $headers[$j] } else { "Column$($j + 1)" }
+                    $obj[$headerName] = $parts[$j]
+                }
+                
+                [void]$result.Data.Add([PSCustomObject]$obj)
+            }
+            # Otherwise just add the raw data
+            else {
+                [void]$result.Data.Add([PSCustomObject]@{
+                    Section = $currentSection
+                    RawData = $line
+                })
             }
         }
         # Handle single-line output
         elseif ($line.Trim()) {
-            [void]$sectionData.Add($line.Trim())
+            [void]$result.Data.Add([PSCustomObject]@{
+                Section = $currentSection
+                RawData = $line.Trim()
+            })
         }
-    }
-    
-    # Add final section
-    if ($sectionData.Count -gt 0) {
-        $result.Data[$currentSection] = @($sectionData.ToArray())
     }
     
     return $result
@@ -76,7 +88,11 @@ function Run-And-Export {
         Write-Host "Executing command: $CommandName" -ForegroundColor Cyan
         
         # Execute command and capture output
-        $rawOutput = Invoke-Expression $Command 2>&1 | Out-String
+        $rawOutput = if ($Command -is [scriptblock]) {
+            & $Command 2>&1 | Out-String
+        } else {
+            Invoke-Expression $Command 2>&1 | Out-String
+        }
         
         # Check if the command produced any output
         if ([string]::IsNullOrWhiteSpace($rawOutput)) {
@@ -94,47 +110,24 @@ function Run-And-Export {
             $jsonFormatted | Out-File -FilePath $outputFilePath -Encoding utf8
         }
         elseif ($outputFormat -eq "csv") {
-            $csvData = [System.Collections.ArrayList]@()
-            
-            foreach ($key in $formattedOutput.Data.Keys) {
-                $value = $formattedOutput.Data[$key]
-                
-                if ($value -is [Array]) {
-                    foreach ($item in $value) {
-                        $csvEntry = [ordered]@{
-                            Command = $formattedOutput.CommandName
-                            Timestamp = $formattedOutput.Timestamp
-                            Section = $key
-                        }
-                        
-                        if ($item -is [hashtable]) {
-                            foreach ($k in $item.Keys) {
-                                $csvEntry[$k] = $item[$k]
-                            }
-                        } else {
-                            $csvEntry["Value"] = $item
-                        }
-                        
-                        [void]$csvData.Add([PSCustomObject]$csvEntry)
-                    }
-                } else {
-                    [void]$csvData.Add([PSCustomObject]@{
-                        Command = $formattedOutput.CommandName
-                        Timestamp = $formattedOutput.Timestamp
-                        Section = $key
-                        Value = $value
-                    })
-                }
+            # Export directly to CSV if the Data property contains objects
+            if ($formattedOutput.Data.Count -gt 0) {
+                $formattedOutput.Data | Select-Object -Property * -ExcludeProperty PSObject | Export-Csv -Path $outputFilePath -NoTypeInformation -Encoding UTF8
             }
-            
-            $csvData | Export-Csv -Path $outputFilePath -NoTypeInformation -Encoding UTF8
+            else {
+                # Fallback for simple output
+                [PSCustomObject]@{
+                    CommandName = $formattedOutput.CommandName
+                    Timestamp = $formattedOutput.Timestamp
+                    Output = $rawOutput
+                } | Export-Csv -Path $outputFilePath -NoTypeInformation -Encoding UTF8
+            }
         }
         
         Write-Host "Output saved to: $outputFilePath" -ForegroundColor Green
     }
     catch {
         Write-Host "Error executing command $CommandName : $($_.Exception.Message)" -ForegroundColor Red
-        # Log the error to a separate file
         $errorLog = Join-Path $outputFolder "error_log.txt"
         "$(Get-Date) - Error in $CommandName : $($_.Exception.Message)`nStackTrace: $($_.ScriptStackTrace)" | Out-File -Append -FilePath $errorLog
     }
