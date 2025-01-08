@@ -24,7 +24,7 @@ A script designed for **Digital Forensics and Incident Response (DFIR)** to coll
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/yourusername/dfir-network-tools.git
+   git clone https://github.com/sPROFFEs/DFIR-Forensic-Script.git
    ```
 2. Navigate to the script folder.
 3. Ensure all required executables are in the same directory.
@@ -46,7 +46,7 @@ Check the generated output files (e.g., Configuracion_red.txt, Conexionesactivas
 
 This repository includes the script and tools for Digital Forensics and Incident Response purposes only. While the script is open-source, some third-party tools may be subject to their respective licenses.
 
-    Script License: MIT License (or your preferred open-source license).
+    Script License: MIT License.
     Third-Party Tools License: Check individual tool documentation (e.g., Sysinternals License).
 
 ## Disclaimer
